@@ -35,6 +35,22 @@ pub(crate) struct PoolInner<DB: Database> {
     pub(crate) acquire_slow_level: Option<Level>,
 }
 
+#[cfg(test)]
+std::thread_local! {
+    static CLOSE_EVENT_REGISTRATION_HOOK: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn run_close_event_registration_hook() {
+    CLOSE_EVENT_REGISTRATION_HOOK.with(|slot| {
+        let hook = slot.borrow_mut().take();
+        if let Some(hook) = hook {
+            hook();
+        }
+    });
+}
+
 impl<DB: Database> PoolInner<DB> {
     pub(super) fn new_arc(
         options: PoolOptions<DB>,
@@ -119,8 +135,13 @@ impl<DB: Database> PoolInner<DB> {
     }
 
     pub(crate) fn close_event(&self) -> CloseEvent {
+        // Subscribe before checking the flag so a concurrent close cannot notify
+        // between the check and registration and leave this listener asleep.
+        let listener = self.on_closed.listen();
+        #[cfg(test)]
+        run_close_event_registration_hook();
         CloseEvent {
-            listener: (!self.is_closed()).then(|| self.on_closed.listen()),
+            listener: (!self.is_closed()).then_some(listener),
         }
     }
 
@@ -621,3 +642,7 @@ impl<DB: Database> Drop for DecrementSizeGuard<DB> {
         }
     }
 }
+
+#[cfg(all(test, feature = "any", feature = "_rt-tokio"))]
+#[path = "shutdown_tests.rs"]
+mod shutdown_tests;

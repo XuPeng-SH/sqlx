@@ -106,7 +106,7 @@ hashbrown = "0.16.0"
 thiserror.workspace = true
 
 [dev-dependencies]
-tokio = { version = "1.25.0", features = ["rt"] }
+tokio = { version = "1.25.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
 
 [dev-dependencies.sqlx]
 # FIXME: https://github.com/rust-lang/cargo/issues/15622
